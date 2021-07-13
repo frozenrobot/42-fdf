@@ -6,14 +6,15 @@
 /*   By: kgulati <kgulati@student.42wolfsburg.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/06/13 10:03:08 by kgulati           #+#    #+#             */
-/*   Updated: 2021/06/30 12:51:40 by kgulati          ###   ########.fr       */
+/*   Updated: 2021/07/13 14:16:44 by kgulati          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "minilibx2/include/mlx.h"
+#include "minilibx/include/mlx.h"
 #include "fdf.h"
 #include "libft1/libft.h"
 #include "get_next_line/get_next_line.h"
+#include <math.h>
 
 static int	ft_isspace(char c)
 {
@@ -246,18 +247,204 @@ void get_map(t_fdf *map, char *filename)
 	fill_grid(map, filename);
 }
 
-void draw(float x, float y, float x1, float y1, t_fdf *map)
+// void draw(float x, float y, float x1, float y1, t_fdf *map)
+// {
+// 	float x_step = x1 - x;
+// 	float y_step = y1 - y;
+// 	int max = MAX(MOD(x_step), MOD(y_step));
+// 	x_step /= max;
+// 	y_step /= max;
+// 	while (1)
+// 	{
+// 		mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x, y, 0xffffff);
+// 		x += x_step;
+// 		y += y_step;
+// 	}
+// }
+
+void copy_grid(int **grid, int **copy, t_fdf *map)
 {
-	float x_step = x1 - x;
-	float y_step = y1 - y;
-	int max = MAX(MOD(x_step), MOD(y_step));
-	x_step /= max;
-	y_step /= max;
-	while (1)
+	int i;
+	int j;
+
+	i = 0;
+	j = 0;
+	while (i < map->height)
 	{
-		mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x, y, 0xffffff);
-		x += x_step;
-		y += y_step;
+		j = 0;
+		while (j < map->width)
+		{
+			copy[i][j] = grid[i][j];
+			j++;
+		}
+		i++;
+	}
+}
+
+int ***draw_points(t_fdf *map)
+{
+	float interval = (float)700 / (MAX(map->width, map->height) - 1);
+	float start_x = (float)150;
+	float start_y = 500 + (map->height - 1) * interval / 2;
+	printf("%f, %f, %f\n", interval, start_x, start_y);
+	int ***pixels = (int ***)malloc((map->height) * sizeof(float **));
+	int i = 0;
+	int j;
+	while (i < map->height)
+	{
+		pixels[i] = (int **)malloc((map->width) * sizeof(float *));
+		j = 0;
+		while (j < map->width)
+		{
+			pixels[i][j] = (int *)malloc(2 * sizeof(float));
+			j++;
+		}
+		i++;
+	}
+
+	// copy_grid(map->grid, pixels, map);
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			// printf("Reached%i, %i\n", i, j);
+
+			pixels[i][j][0] = start_x + j * interval;
+			pixels[i][j][1] = start_y - i * interval;
+			// printf("%d, %d\n", pixels[i][j][0], pixels[i][j][1]);
+			j++;
+		}
+		i++;
+	}
+	// printf("Reached\n");
+	//ROTATION (APPLY MATRIX)
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			pixels[i][j][0] -= 500;
+			pixels[i][j][1] -= 500;
+			j++;
+		}
+		i++;
+	}
+
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			pixels[i][j][0] = pixels[i][j][0] * cos(60) + pixels[i][j][1] * sin(60);
+			pixels[i][j][1] = pixels[i][j][1] * cos(60) - pixels[i][j][0] * sin(60);
+			j++;
+		}
+		i++;
+	}
+	
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			pixels[i][j][0] += 500;
+			pixels[i][j][1] += 500;
+			j++;
+		}
+		i++;
+	}
+
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			if (map->grid[i][j])
+				pixels[i][j][1] += 2 * map->grid[i][j];
+			j++;
+		}
+		i++;
+	}
+
+	return (pixels);
+}
+
+void draw_line_right(t_fdf *map, int ***pixels, int i, int j)
+{
+	int x = pixels[i][j][0];
+	int y = pixels[i][j][1];
+	float dx = pixels[i][j + 1][0] - pixels[i][j][0];
+	float dy = pixels[i][j + 1][1] - pixels[i][j][1];
+	float m = dy / dx;
+	int n = 0;
+	if (MOD(m) > (float)1) //find x for each y
+	{
+		while (n <= (int)dy)
+		{
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)((float)n / m), y + n, 0xffffff);
+			n++;
+		}
+	}
+	else //y for each x
+	{
+		while (n <= (int)dx)
+		{
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n, y + (int)(m * (float)x), 0xffffff);
+			n++;
+		}
+	}
+}
+
+void draw_line_down(t_fdf *map, int ***pixels, int i, int j)
+{
+	int x = pixels[i][j][0];
+	int y = pixels[i][j][1];
+	float dx = pixels[i + 1][j][0] - pixels[i][j][0];
+	float dy = pixels[i + 1][j][1] - pixels[i][j][1];
+	float m = dy / dx;
+	int n = 0;
+	if (MOD(m) > (float)1) //find x for each y
+	{
+		while (n <= (int)dy)
+		{
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)((float)n / m), y + n, 0xffffff);
+			n++;
+		}
+	}
+	else // y for each x
+	{
+		while (n <= (int)dx)
+		{
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n, y + (int)(m * (float)x), 0xffffff);
+			n++;
+		}
+	}
+}
+
+void draw_lines(t_fdf *map, int ***pixels)
+{
+	int i;
+	int j;
+
+	i = 0;
+	while (i < map->height)
+	{
+		j = 0;
+		while (j < map->width)
+		{
+			if (j + 1 < map->width)
+				draw_line_right(map, pixels, i, j);
+			if (i + 1 < map->height)
+				draw_line_down(map, pixels, i, j);
+			j++;
+		}
+		i++;
 	}
 }
 
@@ -279,20 +466,42 @@ int main(int argc, char *argv[])
 	map = (t_fdf *)malloc(sizeof(t_fdf));
 	get_map(map, argv[1]);
 	map->mlx_init_ptr = mlx_init();
-	map->mlx_new_win = mlx_new_window(map->mlx_init_ptr, 1000, 1000, "fdf");
+	// map->mlx_new_win = mlx_new_window(map->mlx_init_ptr, 500, 500, "fdf");
 
+	int ***pixels =	draw_points(map);
+	// draw_lines(map, pixels);
+	// draw(10, 10, 600, 300, map);
+	// mlx_key_hook(map->mlx_new_win, deal_key, NULL);
+	// mlx_loop(map->mlx_init_ptr);
+	printf("%i\n", map->height);
+	printf("%i\n", map->width);
+	for (int i = 0; i < map->height; i++)
+	{
+		for (int j = 0; j < map->width; j++)
+		{
+			printf("%3i", map->grid[i][j]);
+		}
+		printf("\n");
+	}
 
-	draw(10, 10, 600, 300, map);
-	mlx_key_hook(map->mlx_new_win, deal_key, NULL);
-	mlx_loop(map->mlx_init_ptr);
-	// printf("%i\n", map->height);
-	// printf("%i\n", map->width);
-	// for (int i = 0; i < map->height; i++)
-	// {
-	// 	for (int j = 0; j < map->width; j++)
-	// 	{
-	// 		printf("%3i", map->grid[i][j]);
-	// 	}
-	// 	printf("\n");
-	// }
+	printf("%i\n", map->height);
+	printf("%i\n", map->width);
+	for (int i = 0; i < map->height; i++)
+	{
+		for (int j = 0; j < map->width; j++)
+		{
+			printf("%5i", pixels[i][j][0]);
+		}
+		printf("\n");
+	}
+	printf("\n\n\n\n%i\n", map->height);
+	printf("%i\n", map->width);
+	for (int i = 0; i < map->height; i++)
+	{
+		for (int j = 0; j < map->width; j++)
+		{
+			printf("%5i", pixels[i][j][1]);
+		}
+		printf("\n");
+	}
 }

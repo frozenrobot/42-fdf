@@ -1,1 +1,1 @@
-gcc main.c minilibx2/libmlx_x86_64.a -L/usr/include/X11/extensions -lX11 -lXext libft1/libft.a get_next_line/get_next_line.a
+gcc main.c minilibx/libmlx_x86_64.a -L/usr/include/X11/extensions -lX11 -lXext libft1/libft.a get_next_line/get_next_line.a
