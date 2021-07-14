@@ -11,5 +11,6 @@ int main(void)
 
 	mlx_ptr = mlx_init();
 	win_ptr = mlx_new_window(mlx_ptr, 500, 500, "fdf");
-	mlx_loop(win_ptr);
+	mlx_string_put(mlx_ptr, win_ptr, 100, 100, 0xffffff, "hello");
+	mlx_loop(mlx_ptr);
 }
