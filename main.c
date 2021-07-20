@@ -6,7 +6,7 @@
 /*   By: kgulati <kgulati@student.42wolfsburg.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/06/13 10:03:08 by kgulati           #+#    #+#             */
-/*   Updated: 2021/07/14 05:36:37 by kgulati          ###   ########.fr       */
+/*   Updated: 2021/07/20 21:01:13 by kgulati          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,12 +16,19 @@
 #include "get_next_line/get_next_line.h"
 #include <math.h>
 
-static int	ft_isspace(char c)
+void ft_putchar(char c)
 {
-	if (c == ' ' || c == '\f' || c == '\n'
-		|| c == '\r' || c == '\t' || c == '\v')
-		return (1);
-	return (0);
+	write(1, &c, 1);
+}
+
+void ft_perror(char *str)
+{
+	int i;
+
+	i = 0;
+	while (str[i])
+		ft_putchar(str[i]);
+	exit(1);
 }
 
 static int	check_size_ahead(char *str, int i)
@@ -69,8 +76,6 @@ int	ft_atoi(char *str)
 		return (0);
 	i = 0;
 	multiply = 1;
-	while (ft_isspace(str[i]))
-		i++;
 	if (str[i] == '+' || str[i] == '-')
 	{
 		if (str[i] == '-')
@@ -78,12 +83,109 @@ int	ft_atoi(char *str)
 		i++;
 	}
 	size = check_size_ahead(str, i);
+	if (size == 0)
+		ft_perror("Invalid map format\n");
 	return (multiply * convert_to_int(str, i, size));
 }
 
-static void	ft_putchar(char c)
+int	check_size_ahead_hex(char *str, int i, char *base, int len_base)
 {
-	write(1, &c, 1);
+	int j;
+	int b;
+	int found;
+
+	j = 0;
+	while (str[i + j])
+	{
+		b = 0;
+		found = 0;
+		while (b < len_base)
+		{
+			if (str[i + j] == base[b])
+			{
+				j++;
+				found = 1;
+			}
+			b++;
+		}
+		if (found != 1)
+			return (j);
+	}
+	return (j);
+}
+
+int	power(int n, int exponent)
+{
+	if (exponent < 0)
+		return (0);
+	else if (exponent == 0)
+		return (1);
+	else
+		return (n * power(n, exponent - 1));
+}
+
+int	convert_to_int_hex(char *str, int i, int size, char *base)
+{
+	int result;
+	int j;
+	int base_index;
+	int base_count;
+	int len_base;
+
+	len_base = 16;
+	result = 0;
+	j = 0;
+	while (j <= size)
+	{
+		base_count = 0;
+		while (base_count < len_base)
+		{
+			if (str[i + j] == base[base_count])
+				base_index = base_count;
+			base_count++;
+		}
+		result += (base_index * power(len_base, (size - 1 - j)));
+		j++;
+	}
+	return (result);
+}
+
+int	get_hex(char *str, int i)
+{
+	int size;
+	int len_base;
+	char *base;
+
+	base = "0123456789ABCDEF";
+	len_base = 16;
+	if (str[i] == '+')
+		i++;
+	if (str[i] != '0' || str[i + 1] != 'x')
+		ft_perror("Invalid colour format");
+	i += 2;
+	size = check_size_ahead_hex(str, i, base, len_base);
+	return (convert_to_int_hex(str, i, size, base));
+}
+
+int contains_comma(char *str)
+{
+	int i;
+
+	i = 0;
+	if (str[i] == '-' || str[i] == '+')
+		i++;
+	while (str[i] >= '0' && str[i] <= '9')
+		i++;
+	if (str[i] == ',')
+		return (i + 1);
+	return (0);
+}
+
+int ft_getcolour(char *str)
+{
+	if (!contains_comma(str))
+		return (0xFFFFFF);
+	return (get_hex(str, contains_comma(str)));
 }
 
 void	ft_putstr(char *s)
@@ -206,7 +308,7 @@ int find_width(char *filename)
 	return (count_words(line, ' '));
 }
 
-void fill_grid(t_fdf *map, char *filename)
+void fill_grid_numbers(t_fdf *map, char *filename)
 {
 	int i;
 	int j;
@@ -222,7 +324,32 @@ void fill_grid(t_fdf *map, char *filename)
 		row = ft_split(line, ' ');
 		while (j < map->width)
 		{
-			map->grid[i][j] = ft_atoi(row[j]);
+			map->grid[i][j][0] = ft_atoi(row[j]);
+			free(row[j]);
+			j++;
+		}
+		free(row);
+		i++;
+	}
+}
+
+void fill_grid_colours(t_fdf *map, char *filename)
+{
+	int i;
+	int j;
+	int fd;
+	char *line;
+	char **row;
+
+	fd = open(filename, O_RDONLY);
+	i = 0;
+	while (get_next_line(fd, &line))
+	{
+		j = 0;
+		row = ft_split(line, ' ');
+		while (j < map->width)
+		{
+			map->grid[i][j][1] = ft_getcolour(row[j]);
 			free(row[j]);
 			j++;
 		}
@@ -234,33 +361,41 @@ void fill_grid(t_fdf *map, char *filename)
 void get_map(t_fdf *map, char *filename)
 {
 	int i;
+	int j;
 
 	map->height = find_height(filename);
 	map->width = find_width(filename);
-	map->grid = (int **)malloc((map->height + 1) * sizeof(int *));
+	map->grid = (int ***)malloc((map->height + 1) * sizeof(int *));
 	i = 0;
 	while (i < map->height)
 	{
-		map->grid[i] = (int *)malloc((map->width + 1) * sizeof(int));
+		map->grid[i] = (int **)malloc((map->width) * sizeof(int *));
+		j = 0;
+		while (j < map->width)
+		{
+			map->grid[i][j] = (int *)malloc(2 * sizeof(int));
+			j++;
+		}
 		i++;
 	}
-	fill_grid(map, filename);
+	fill_grid_numbers(map, filename);
+	fill_grid_colours(map, filename);
 }
 
-void draw(float x, float y, float x1, float y1, t_fdf *map)
-{
-	float x_step = x1 - x;
-	float y_step = y1 - y;
-	int max = MAX(MOD(x_step), MOD(y_step));
-	x_step /= max;
-	y_step /= max;
-	while (1)
-	{
-		mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x, y, 0xffffff);
-		x += x_step;
-		y += y_step;
-	}
-}
+// void draw(float x, float y, float x1, float y1, t_fdf *map)
+// {
+// 	float x_step = x1 - x;
+// 	float y_step = y1 - y;
+// 	int max = MAX(MOD(x_step), MOD(y_step));
+// 	x_step /= max;
+// 	y_step /= max;
+// 	while (1)
+// 	{
+// 		mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x, y, 0xffffff);
+// 		x += x_step;
+// 		y += y_step;
+// 	}
+// }
 
 void copy_grid(int **grid, int **copy, t_fdf *map)
 {
@@ -286,7 +421,7 @@ int ***draw_points(t_fdf *map)
 	float interval = (float)350 / (MAX(map->width, map->height) - 1);
 	float start_x = (float)75;
 	float start_y = 250 - (map->height - 1) * interval / 2;
-	printf("%f, %f, %f\n", interval, start_x, start_y);
+	// printf("%f, %f, %f\n", interval, start_x, start_y);
 	int ***pixels = (int ***)malloc((map->height) * sizeof(float **));
 	int i = 0;
 	int j;
@@ -366,7 +501,7 @@ int ***draw_points(t_fdf *map)
 		while (j < map->width)
 		{
 			if (map->grid[i][j])
-				pixels[i][j][1] -= map->grid[i][j];
+				pixels[i][j][1] -= *(map->grid[i][j]);
 			// pixels[i][j][0] = 500 - pixels[i][j][0];
 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, pixels[i][j][0], pixels[i][j][1], 0xffffff);
 			j++;
@@ -375,6 +510,28 @@ int ***draw_points(t_fdf *map)
 	}
 
 	return (pixels);
+}
+
+int max_height(t_fdf *map)
+{
+	int i;
+	int j;
+	int max;
+
+	i = 0;
+	j = 0;
+	max = 0;
+	while (i < map->height)
+	{
+		while (j < map->width)
+		{
+			if (map->grid[i][j][0] > max)
+				max = map->grid[i][j][0];
+			j++;
+		}
+		i++;
+	}
+	return (max);
 }
 
 void draw_line_right(t_fdf *map, int ***pixels, int i, int j)
@@ -422,26 +579,48 @@ void draw_line_right(t_fdf *map, int ***pixels, int i, int j)
 	// 		n++;
 	// 	}
 	// }
-	if (MOD(m) > (float)1) //find x for each y
+	// // if (MOD(m) > (float)1) //find x for each y
+	// // {
+	// // 	while (n <= (int)MOD(dy))
+	// // 	{
+	// // 		if (map->grid[i][j] || map->grid[i][j + 1])
+	// // 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// // 		else
+	// // 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// // 		n++;
+	// // 	}
+	// // }
+	// // else //y for each x
+	// // {
+	// // 	while (n <= (int)MOD(dx))
+	// // 	{
+	// // 		if (map->grid[i][j] || map->grid[i][j + 1])
+	// // 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// // 		else
+	// // 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// // 		n++;
+	// // 	}
+	// }
+	if (MOD(m) < 1)
 	{
-		while (n <= (int)MOD(dy))
+		while (MOD(n) < MOD(dx))
 		{
-			if (map->grid[i][j] || map->grid[i][j + 1])
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xff0000);
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n, y + (m * n), MIN(map->grid[i][j][1], map->grid[i][j + 1][1]));
+			if (dx > 0)
+				n++;
 			else
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0x00ffff);
-			n++;
+				n--;
 		}
 	}
-	else //y for each x
+	else
 	{
-		while (n <= (int)MOD(dx))
+		while (MOD(n) < MOD(dy))
 		{
-			if (map->grid[i][j] || map->grid[i][j + 1])
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xff0000);
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n/m, y + n, MIN(map->grid[i][j][1], map->grid[i][j + 1][1]));
+			if (dy > 0)
+				n++;
 			else
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0x00ffff);
-			n++;
+				n--;
 		}
 	}
 }
@@ -470,26 +649,48 @@ void draw_line_down(t_fdf *map, int ***pixels, int i, int j)
 	// 		n++;
 	// 	}
 	// }
-	if (MOD(m) > (float)1) //find x for each y
+	// if (MOD(m) > (float)1) //find x for each y
+	// {
+	// 	while (n <= (int)MOD(dy))
+	// 	{
+	// 		if (map->grid[i][j] || map->grid[i + 1][j])
+	// 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// 		else
+	// 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// 		n++;
+	// 	}
+	// }
+	// else //y for each x
+	// {
+	// 	while (n <= (int)MOD(dx))
+	// 	{
+	// 		if (map->grid[i][j] || map->grid[i + 1][j])
+	// 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// 		else
+	// 			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xffffff - (*(map->grid[i][j])/max_height(map)) * (16776960));
+	// 		n++;
+	// 	}
+	// }
+	if (MOD(m) < 1)
 	{
-		while (n <= (int)MOD(dy))
+		while (MOD(n) < MOD(dx))
 		{
-			if (map->grid[i][j] || map->grid[i + 1][j])
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0xff0000);
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n, y + (m * n), MIN(map->grid[i][j][1], map->grid[i + 1][j][1]));
+			if (dx > 0)
+				n++;
 			else
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + (int)(((float)n / MOD(m)) * dx/MOD(dx)), y + n * (dy/MOD(dy)), 0x00ffff);
-			n++;
+				n--;
 		}
 	}
-	else //y for each x
+	else
 	{
-		while (n <= (int)MOD(dx))
+		while (MOD(n) < MOD(dy))
 		{
-			if (map->grid[i][j] || map->grid[i + 1][j])
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0xff0000);
+			mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n/m, y + n, MIN(map->grid[i][j][1], map->grid[i + 1][j][1]));
+			if (dy > 0)
+				n++;
 			else
-				mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, x + n * dx/MOD(dx), y + (int)((MOD(m) * (float)n) * dy/MOD(dy)), 0x00ffff);
-			n++;
+				n--;
 		}
 	}
 }
@@ -545,35 +746,35 @@ int main(int argc, char *argv[])
 	// mlx_pixel_put(map->mlx_init_ptr, map->mlx_new_win, 250, 250, 0xffffff);
 	mlx_key_hook(map->mlx_new_win, deal_key, NULL);
 	mlx_loop(map->mlx_init_ptr);
+	// printf("%i\n", map->height);
+	// printf("%i\n", map->width);
+	// for (int i = 0; i < map->height; i++)
+	// {
+	// 	for (int j = 0; j < map->width; j++)
+	// 	{
+	// 		printf("%3i", map->grid[i][j]);
+	// 	}
+	// 	printf("\n");
+	// }
+
 	printf("%i\n", map->height);
 	printf("%i\n", map->width);
 	for (int i = 0; i < map->height; i++)
 	{
 		for (int j = 0; j < map->width; j++)
 		{
-			printf("%3i", map->grid[i][j]);
+			printf("%5i", map->grid[i][j][0]);
 		}
 		printf("\n");
 	}
-
-	printf("%i\n", map->height);
-	// printf("%i\n", map->width);
-	// for (int i = 0; i < map->height; i++)
-	// {
-	// 	for (int j = 0; j < map->width; j++)
-	// 	{
-	// 		printf("%5i", pixels[i][j][0]);
-	// 	}
-	// 	printf("\n");
-	// }
-	// printf("\n\n\n\n%i\n", map->height);
-	// printf("%i\n", map->width);
-	// for (int i = 0; i < map->height; i++)
-	// {
-	// 	for (int j = 0; j < map->width; j++)
-	// 	{
-	// 		printf("%5i", pixels[i][j][1]);
-	// 	}
-	// 	printf("\n");
-	// }
+	printf("\n\n\n\n%i\n", map->height);
+	printf("%i\n", map->width);
+	for (int i = 0; i < map->height; i++)
+	{
+		for (int j = 0; j < map->width; j++)
+		{
+			printf("%10i", map->grid[i][j][1]);
+		}
+		printf("\n");
+	}
 }
